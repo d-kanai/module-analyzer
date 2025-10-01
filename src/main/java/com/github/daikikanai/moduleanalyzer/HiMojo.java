@@ -1,4 +1,4 @@
-package com.example.moduleanalyzer;
+package com.github.daikikanai.moduleanalyzer;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;

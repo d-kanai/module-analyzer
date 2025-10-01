@@ -8,12 +8,19 @@
     <artifactId>test-project</artifactId>
     <version>1.0-SNAPSHOT</version>
 
+    <repositories>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
+
     <build>
         <plugins>
             <plugin>
-                <groupId>com.github.daikikanai</groupId>
-                <artifactId>moduleanalyze-maven-plugin</artifactId>
-                <version>1.0-SNAPSHOT</version>
+                <groupId>com.github.d-kanai</groupId>
+                <artifactId>module-analyzer</artifactId>
+                <version>1.0.0</version>
             </plugin>
         </plugins>
     </build>
