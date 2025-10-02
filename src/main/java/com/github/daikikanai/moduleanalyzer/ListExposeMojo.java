@@ -32,11 +32,7 @@ public class ListExposeMojo extends AbstractMojo {
             }
 
             Map<String, List<String>> moduleExposeClasses = scanModules(root);
-
-            if (moduleExposeClasses.isEmpty()) {
-                getLog().info("No expose classes found.");
-                return;
-            }
+            Set<String> allModules = scanAllModules(root);
 
             // Collect all expose classes
             Set<String> allExposeClasses = new HashSet<>();
@@ -48,12 +44,27 @@ public class ListExposeMojo extends AbstractMojo {
             Map<String, Map<String, Set<String>>> moduleDependencies = new HashMap<>();
             Map<String, Map<String, Set<String>>> moduleDependenciesFrom = new HashMap<>();
             if (showDependency) {
-                moduleDependencies = buildModuleDependencies(root, allExposeClasses, moduleExposeClasses.keySet());
-                moduleDependenciesFrom = buildModuleDependenciesFrom(root, allExposeClasses, moduleExposeClasses.keySet());
+                moduleDependencies = buildModuleDependencies(root, allExposeClasses, allModules);
+                moduleDependenciesFrom = buildModuleDependenciesFrom(root, allExposeClasses, allModules);
+            }
+
+            // Collect modules to display: modules with expose classes OR modules with dependencies
+            Set<String> modulesToDisplay = new HashSet<>(moduleExposeClasses.keySet());
+            if (showDependency) {
+                for (String module : allModules) {
+                    if (moduleDependencies.containsKey(module) && !moduleDependencies.get(module).isEmpty()) {
+                        modulesToDisplay.add(module);
+                    }
+                }
+            }
+
+            if (modulesToDisplay.isEmpty()) {
+                getLog().info("No modules to display.");
+                return;
             }
 
             // Sort modules by name
-            List<String> sortedModules = new ArrayList<>(moduleExposeClasses.keySet());
+            List<String> sortedModules = new ArrayList<>(modulesToDisplay);
             Collections.sort(sortedModules);
 
             for (String module : sortedModules) {
@@ -61,10 +72,11 @@ public class ListExposeMojo extends AbstractMojo {
                 getLog().info("[Module: " + module + "]");
 
                 List<String> classes = moduleExposeClasses.get(module);
-                Collections.sort(classes);
-
-                for (String className : classes) {
-                    getLog().info("  - " + className);
+                if (classes != null) {
+                    Collections.sort(classes);
+                    for (String className : classes) {
+                        getLog().info("  - " + className);
+                    }
                 }
 
                 if (showDependency) {
@@ -112,6 +124,20 @@ public class ListExposeMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new MojoExecutionException("Error scanning modules", e);
         }
+    }
+
+    private Set<String> scanAllModules(Path root) throws IOException {
+        Set<String> modules = new HashSet<>();
+
+        try (Stream<Path> paths = Files.list(root)) {
+            paths.filter(Files::isDirectory)
+                 .forEach(modulePath -> {
+                     String moduleName = modulePath.getFileName().toString();
+                     modules.add(moduleName);
+                 });
+        }
+
+        return modules;
     }
 
     private Map<String, List<String>> scanModules(Path root) throws IOException {
