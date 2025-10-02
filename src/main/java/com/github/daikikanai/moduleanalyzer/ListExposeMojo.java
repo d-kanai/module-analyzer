@@ -20,8 +20,11 @@ public class ListExposeMojo extends AbstractMojo {
     @Parameter(property = "rootDir", required = true)
     private String rootDir;
 
-    @Parameter(property = "showCallers", defaultValue = "false")
-    private boolean showCallers;
+    @Parameter(property = "dependencyTo", defaultValue = "false")
+    private boolean dependencyTo;
+
+    @Parameter(property = "dependencyFrom", defaultValue = "false")
+    private boolean dependencyFrom;
 
     public void execute() throws MojoExecutionException {
         try {
@@ -44,10 +47,10 @@ public class ListExposeMojo extends AbstractMojo {
                 allExposeClasses.addAll(classes);
             }
 
-            // Find callers if requested
-            Map<String, List<String>> callers = new HashMap<>();
-            if (showCallers) {
-                callers = findCallers(root, allExposeClasses);
+            // Build module dependencies
+            Map<String, Set<String>> moduleDependencies = new HashMap<>();
+            if (dependencyTo || dependencyFrom) {
+                moduleDependencies = buildModuleDependencies(root, allExposeClasses, moduleExposeClasses.keySet());
             }
 
             // Sort modules by name
@@ -63,15 +66,35 @@ public class ListExposeMojo extends AbstractMojo {
 
                 for (String className : classes) {
                     getLog().info("  - " + className);
+                }
 
-                    if (showCallers && callers.containsKey(className)) {
-                        List<String> callerList = callers.get(className);
-                        if (!callerList.isEmpty()) {
-                            getLog().info("    Called by:");
-                            Collections.sort(callerList);
-                            for (String caller : callerList) {
-                                getLog().info("      - " + caller);
-                            }
+                // Show dependencyTo (modules this module depends on)
+                if (dependencyTo && moduleDependencies.containsKey(module)) {
+                    Set<String> deps = moduleDependencies.get(module);
+                    if (!deps.isEmpty()) {
+                        getLog().info("  Dependencies to:");
+                        List<String> sortedDeps = new ArrayList<>(deps);
+                        Collections.sort(sortedDeps);
+                        for (String dep : sortedDeps) {
+                            getLog().info("    - " + dep);
+                        }
+                    }
+                }
+
+                // Show dependencyFrom (modules that depend on this module)
+                if (dependencyFrom) {
+                    Set<String> fromModules = new HashSet<>();
+                    for (Map.Entry<String, Set<String>> entry : moduleDependencies.entrySet()) {
+                        if (entry.getValue().contains(module)) {
+                            fromModules.add(entry.getKey());
+                        }
+                    }
+                    if (!fromModules.isEmpty()) {
+                        getLog().info("  Depended by:");
+                        List<String> sortedFrom = new ArrayList<>(fromModules);
+                        Collections.sort(sortedFrom);
+                        for (String from : sortedFrom) {
+                            getLog().info("    - " + from);
                         }
                     }
                 }
@@ -165,12 +188,13 @@ public class ListExposeMojo extends AbstractMojo {
         return null;
     }
 
-    private Map<String, List<String>> findCallers(Path root, Set<String> exposeClasses) throws IOException {
-        Map<String, List<String>> callers = new HashMap<>();
+    private Map<String, Set<String>> buildModuleDependencies(Path root, Set<String> exposeClasses, Set<String> allModules) throws IOException {
+        // Map: callerModule -> Set of modules it depends on
+        Map<String, Set<String>> dependencies = new HashMap<>();
 
-        // Initialize empty lists for all expose classes
-        for (String exposeClass : exposeClasses) {
-            callers.put(exposeClass, new ArrayList<>());
+        // Initialize empty sets for all modules
+        for (String module : allModules) {
+            dependencies.put(module, new HashSet<>());
         }
 
         // Scan all Java files
@@ -181,16 +205,15 @@ public class ListExposeMojo extends AbstractMojo {
                  .forEach(javaFile -> {
                      try {
                          String content = new String(Files.readAllBytes(javaFile));
-                         String callerClass = extractFullClassName(root, javaFile, content);
                          String callerModule = extractModuleName(root, javaFile);
 
-                         if (callerClass != null) {
+                         if (callerModule != null && !callerModule.equals("unknown")) {
                              for (String exposeClass : exposeClasses) {
                                  String exposeModule = extractModuleFromClassName(exposeClass);
 
                                  // Only add if from different module
                                  if (!callerModule.equals(exposeModule) && isCallingClass(content, exposeClass)) {
-                                     callers.get(exposeClass).add(callerClass);
+                                     dependencies.get(callerModule).add(exposeModule);
                                  }
                              }
                          }
@@ -200,7 +223,7 @@ public class ListExposeMojo extends AbstractMojo {
                  });
         }
 
-        return callers;
+        return dependencies;
     }
 
     private String extractModuleFromClassName(String className) {

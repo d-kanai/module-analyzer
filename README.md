@@ -37,7 +37,7 @@
 ## 📋 コマンド: list-expose
 
 ### 説明
-各モジュールの公開API（`expose` ディレクトリ配下のJavaクラス）を一覧表示します。
+各モジュールの公開API（`expose` ディレクトリ配下のJavaクラス）を一覧表示します。オプションでモジュール間の依存関係も表示できます。
 
 ### 実行コマンド
 ```bash
@@ -46,14 +46,18 @@ mvn module-analyzer:list-expose -DrootDir=modules
 
 ### パラメータ
 - `rootDir`: モジュールのルートディレクトリパス（必須）
+- `dependencyTo`: 各モジュールが依存している他のモジュールを表示（デフォルト: false）
+- `dependencyFrom`: 各モジュールが依存されている他のモジュールを表示（デフォルト: false）
 
 ### プロジェクト構成例
 ```
 modules/
 ├── order/
-│   └── src/main/java/com/example/order/expose/
-│       ├── OrderApi.java
-│       └── OrderDto.java
+│   ├── src/main/java/com/example/order/expose/
+│   │   ├── OrderApi.java
+│   │   └── OrderDto.java
+│   └── service/
+│       └── OrderService.java  # ProductApiとUserApiを使用
 ├── user/
 │   └── src/main/java/com/example/user/expose/
 │       ├── UserApi.java
@@ -64,6 +68,8 @@ modules/
 ```
 
 ### 実行結果
+
+#### 基本実行（依存関係なし）
 ```bash
 $ mvn module-analyzer:list-expose -DrootDir=modules
 
@@ -77,6 +83,68 @@ $ mvn module-analyzer:list-expose -DrootDir=modules
 [INFO] [Module: user]
 [INFO]   - com.example.user.expose.UserApi
 [INFO]   - com.example.user.expose.UserDto
+```
+
+#### dependencyTo オプション（依存先を表示）
+```bash
+$ mvn module-analyzer:list-expose -DrootDir=modules -DdependencyTo=true
+
+[INFO] [Module: order]
+[INFO]   - com.example.order.expose.OrderApi
+[INFO]   - com.example.order.expose.OrderDto
+[INFO]   Dependencies to:
+[INFO]     - product
+[INFO]     - user
+[INFO]
+[INFO] [Module: product]
+[INFO]   - com.example.product.expose.ProductApi
+[INFO]
+[INFO] [Module: user]
+[INFO]   - com.example.user.expose.UserApi
+[INFO]   - com.example.user.expose.UserDto
+```
+
+#### dependencyFrom オプション（依存元を表示）
+```bash
+$ mvn module-analyzer:list-expose -DrootDir=modules -DdependencyFrom=true
+
+[INFO] [Module: order]
+[INFO]   - com.example.order.expose.OrderApi
+[INFO]   - com.example.order.expose.OrderDto
+[INFO]
+[INFO] [Module: product]
+[INFO]   - com.example.product.expose.ProductApi
+[INFO]   Depended by:
+[INFO]     - order
+[INFO]
+[INFO] [Module: user]
+[INFO]   - com.example.user.expose.UserApi
+[INFO]   - com.example.user.expose.UserDto
+[INFO]   Depended by:
+[INFO]     - order
+```
+
+#### 両方のオプションを同時に使用
+```bash
+$ mvn module-analyzer:list-expose -DrootDir=modules -DdependencyTo=true -DdependencyFrom=true
+
+[INFO] [Module: order]
+[INFO]   - com.example.order.expose.OrderApi
+[INFO]   - com.example.order.expose.OrderDto
+[INFO]   Dependencies to:
+[INFO]     - product
+[INFO]     - user
+[INFO]
+[INFO] [Module: product]
+[INFO]   - com.example.product.expose.ProductApi
+[INFO]   Depended by:
+[INFO]     - order
+[INFO]
+[INFO] [Module: user]
+[INFO]   - com.example.user.expose.UserApi
+[INFO]   - com.example.user.expose.UserDto
+[INFO]   Depended by:
+[INFO]     - order
 ```
 
 ---
