@@ -20,11 +20,8 @@ public class ListExposeMojo extends AbstractMojo {
     @Parameter(property = "rootDir", required = true)
     private String rootDir;
 
-    @Parameter(property = "dependencyTo", defaultValue = "false")
-    private boolean dependencyTo;
-
-    @Parameter(property = "dependencyFrom", defaultValue = "false")
-    private boolean dependencyFrom;
+    @Parameter(property = "showDependency", defaultValue = "false")
+    private boolean showDependency;
 
     public void execute() throws MojoExecutionException {
         try {
@@ -49,7 +46,7 @@ public class ListExposeMojo extends AbstractMojo {
 
             // Build module dependencies
             Map<String, Set<String>> moduleDependencies = new HashMap<>();
-            if (dependencyTo || dependencyFrom) {
+            if (showDependency) {
                 moduleDependencies = buildModuleDependencies(root, allExposeClasses, moduleExposeClasses.keySet());
             }
 
@@ -68,21 +65,21 @@ public class ListExposeMojo extends AbstractMojo {
                     getLog().info("  - " + className);
                 }
 
-                // Show dependencyTo (modules this module depends on)
-                if (dependencyTo && moduleDependencies.containsKey(module)) {
-                    Set<String> deps = moduleDependencies.get(module);
-                    if (!deps.isEmpty()) {
-                        getLog().info("  Dependencies to:");
-                        List<String> sortedDeps = new ArrayList<>(deps);
-                        Collections.sort(sortedDeps);
-                        for (String dep : sortedDeps) {
-                            getLog().info("    - " + dep);
+                if (showDependency) {
+                    // Show dependencies to (modules this module depends on)
+                    if (moduleDependencies.containsKey(module)) {
+                        Set<String> deps = moduleDependencies.get(module);
+                        if (!deps.isEmpty()) {
+                            getLog().info("  Dependencies to:");
+                            List<String> sortedDeps = new ArrayList<>(deps);
+                            Collections.sort(sortedDeps);
+                            for (String dep : sortedDeps) {
+                                getLog().info("    - " + dep);
+                            }
                         }
                     }
-                }
 
-                // Show dependencyFrom (modules that depend on this module)
-                if (dependencyFrom) {
+                    // Show dependencies from (modules that depend on this module)
                     Set<String> fromModules = new HashSet<>();
                     for (Map.Entry<String, Set<String>> entry : moduleDependencies.entrySet()) {
                         if (entry.getValue().contains(module)) {

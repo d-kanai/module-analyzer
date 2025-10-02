@@ -46,8 +46,7 @@ mvn module-analyzer:list-expose -DrootDir=modules
 
 ### パラメータ
 - `rootDir`: モジュールのルートディレクトリパス（必須）
-- `dependencyTo`: 各モジュールが依存している他のモジュールを表示（デフォルト: false）
-- `dependencyFrom`: 各モジュールが依存されている他のモジュールを表示（デフォルト: false）
+- `showDependency`: モジュール間の依存関係を表示（デフォルト: false）
 
 ### プロジェクト構成例
 ```
@@ -85,49 +84,16 @@ $ mvn module-analyzer:list-expose -DrootDir=modules
 [INFO]   - com.example.user.expose.UserDto
 ```
 
-#### dependencyTo オプション（依存先を表示）
+#### showDependency オプション（依存関係を表示）
 ```bash
-$ mvn module-analyzer:list-expose -DrootDir=modules -DdependencyTo=true
+$ mvn module-analyzer:list-expose -DrootDir=modules -DshowDependency=true
 
-[INFO] [Module: order]
-[INFO]   - com.example.order.expose.OrderApi
-[INFO]   - com.example.order.expose.OrderDto
-[INFO]   Dependencies to:
-[INFO]     - product
+[INFO] [Module: notification]
+[INFO]   - com.example.notification.expose.NotificationApi
+[INFO]   - com.example.notification.expose.NotificationDto
+[INFO]   Depended by:
 [INFO]     - user
 [INFO]
-[INFO] [Module: product]
-[INFO]   - com.example.product.expose.ProductApi
-[INFO]
-[INFO] [Module: user]
-[INFO]   - com.example.user.expose.UserApi
-[INFO]   - com.example.user.expose.UserDto
-```
-
-#### dependencyFrom オプション（依存元を表示）
-```bash
-$ mvn module-analyzer:list-expose -DrootDir=modules -DdependencyFrom=true
-
-[INFO] [Module: order]
-[INFO]   - com.example.order.expose.OrderApi
-[INFO]   - com.example.order.expose.OrderDto
-[INFO]
-[INFO] [Module: product]
-[INFO]   - com.example.product.expose.ProductApi
-[INFO]   Depended by:
-[INFO]     - order
-[INFO]
-[INFO] [Module: user]
-[INFO]   - com.example.user.expose.UserApi
-[INFO]   - com.example.user.expose.UserDto
-[INFO]   Depended by:
-[INFO]     - order
-```
-
-#### 両方のオプションを同時に使用
-```bash
-$ mvn module-analyzer:list-expose -DrootDir=modules -DdependencyTo=true -DdependencyFrom=true
-
 [INFO] [Module: order]
 [INFO]   - com.example.order.expose.OrderApi
 [INFO]   - com.example.order.expose.OrderDto
@@ -143,6 +109,8 @@ $ mvn module-analyzer:list-expose -DrootDir=modules -DdependencyTo=true -Ddepend
 [INFO] [Module: user]
 [INFO]   - com.example.user.expose.UserApi
 [INFO]   - com.example.user.expose.UserDto
+[INFO]   Dependencies to:
+[INFO]     - notification
 [INFO]   Depended by:
 [INFO]     - order
 ```
