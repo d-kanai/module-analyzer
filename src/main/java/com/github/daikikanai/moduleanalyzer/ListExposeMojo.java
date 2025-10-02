@@ -71,6 +71,7 @@ public class ListExposeMojo extends AbstractMojo {
 
             for (String module : sortedModules) {
                 getLog().info("");
+                getLog().info("[Module: " + module + "]");
 
                 List<String> classes = moduleExposeClasses.get(module);
                 if (classes != null) {
@@ -78,7 +79,6 @@ public class ListExposeMojo extends AbstractMojo {
                     for (String className : classes) {
                         getLog().info("  - " + className);
                     }
-                    getLog().info("[Module: " + module + "]");
                 } else {
                     // Module has no expose classes, show caller classes
                     if (moduleCallerClasses.containsKey(module)) {
@@ -89,7 +89,6 @@ public class ListExposeMojo extends AbstractMojo {
                             getLog().info("  - " + callerClass);
                         }
                     }
-                    getLog().info("[Module: " + module + "]");
                 }
 
                 if (showDependency) {
