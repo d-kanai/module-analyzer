@@ -44,8 +44,8 @@ public class ListExposeMojo extends AbstractMojo {
                 allExposeClasses.addAll(classes);
             }
 
-            // Build module dependencies
-            Map<String, Set<String>> moduleDependencies = new HashMap<>();
+            // Build module dependencies with class details
+            Map<String, Map<String, Set<String>>> moduleDependencies = new HashMap<>();
             if (showDependency) {
                 moduleDependencies = buildModuleDependencies(root, allExposeClasses, moduleExposeClasses.keySet());
             }
@@ -68,30 +68,44 @@ public class ListExposeMojo extends AbstractMojo {
                 if (showDependency) {
                     // Show dependencies to (modules this module depends on)
                     if (moduleDependencies.containsKey(module)) {
-                        Set<String> deps = moduleDependencies.get(module);
+                        Map<String, Set<String>> deps = moduleDependencies.get(module);
                         if (!deps.isEmpty()) {
                             getLog().info("  Dependencies to:");
-                            List<String> sortedDeps = new ArrayList<>(deps);
-                            Collections.sort(sortedDeps);
-                            for (String dep : sortedDeps) {
-                                getLog().info("    - " + dep);
+                            List<String> sortedModules2 = new ArrayList<>(deps.keySet());
+                            Collections.sort(sortedModules2);
+                            for (String targetModule : sortedModules2) {
+                                Set<String> classList = deps.get(targetModule);
+                                List<String> sortedClasses = new ArrayList<>(classList);
+                                Collections.sort(sortedClasses);
+                                String classNames = sortedClasses.stream()
+                                    .map(c -> c.substring(c.lastIndexOf('.') + 1))
+                                    .collect(Collectors.joining(", "));
+                                getLog().info("    - " + targetModule + " (" + classNames + ")");
                             }
                         }
                     }
 
                     // Show dependencies from (modules that depend on this module)
-                    Set<String> fromModules = new HashSet<>();
-                    for (Map.Entry<String, Set<String>> entry : moduleDependencies.entrySet()) {
-                        if (entry.getValue().contains(module)) {
-                            fromModules.add(entry.getKey());
+                    Map<String, Set<String>> fromModules = new HashMap<>();
+                    for (Map.Entry<String, Map<String, Set<String>>> entry : moduleDependencies.entrySet()) {
+                        String callerModule = entry.getKey();
+                        Map<String, Set<String>> targets = entry.getValue();
+                        if (targets.containsKey(module)) {
+                            fromModules.put(callerModule, targets.get(module));
                         }
                     }
                     if (!fromModules.isEmpty()) {
                         getLog().info("  Depended by:");
-                        List<String> sortedFrom = new ArrayList<>(fromModules);
+                        List<String> sortedFrom = new ArrayList<>(fromModules.keySet());
                         Collections.sort(sortedFrom);
                         for (String from : sortedFrom) {
-                            getLog().info("    - " + from);
+                            Set<String> classList = fromModules.get(from);
+                            List<String> sortedClasses = new ArrayList<>(classList);
+                            Collections.sort(sortedClasses);
+                            String classNames = sortedClasses.stream()
+                                .map(c -> c.substring(c.lastIndexOf('.') + 1))
+                                .collect(Collectors.joining(", "));
+                            getLog().info("    - " + from + " (" + classNames + ")");
                         }
                     }
                 }
@@ -186,13 +200,13 @@ public class ListExposeMojo extends AbstractMojo {
         return null;
     }
 
-    private Map<String, Set<String>> buildModuleDependencies(Path root, Set<String> exposeClasses, Set<String> allModules) throws IOException {
-        // Map: callerModule -> Set of modules it depends on
-        Map<String, Set<String>> dependencies = new HashMap<>();
+    private Map<String, Map<String, Set<String>>> buildModuleDependencies(Path root, Set<String> exposeClasses, Set<String> allModules) throws IOException {
+        // Map: callerModule -> targetModule -> Set of expose classes
+        Map<String, Map<String, Set<String>>> dependencies = new HashMap<>();
 
-        // Initialize empty sets for all modules
+        // Initialize empty maps for all modules
         for (String module : allModules) {
-            dependencies.put(module, new HashSet<>());
+            dependencies.put(module, new HashMap<>());
         }
 
         // Scan all Java files
@@ -211,7 +225,8 @@ public class ListExposeMojo extends AbstractMojo {
 
                                  // Only add if from different module
                                  if (!callerModule.equals(exposeModule) && isCallingClass(content, exposeClass)) {
-                                     dependencies.get(callerModule).add(exposeModule);
+                                     Map<String, Set<String>> moduleDeps = dependencies.get(callerModule);
+                                     moduleDeps.computeIfAbsent(exposeModule, k -> new HashSet<>()).add(exposeClass);
                                  }
                              }
                          }
