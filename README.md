@@ -84,31 +84,3 @@ $ mvn module-analyzer:list-expose -DrootDir=modules
 [INFO] ------------------------------------------------------------------------
 ```
 
-## 💡 ユースケース
-
-- 🏗️ **モジュラモノリスの設計**: 各モジュールの公開APIを明確化
-- 📚 **ドキュメント生成**: モジュール間の依存関係を把握
-- 🔒 **カプセル化の確認**: 意図した公開APIのみが expose されているか検証
-
-## 📦 開発者向け
-
-### ローカルビルド
-
-```bash
-mvn clean install
-```
-
-### テスト実行
-
-```bash
-cd test-project
-mvn module-analyzer:list-expose -DrootDir=modules
-```
-
-## 📄 ライセンス
-
-MIT License
-
-## 🙋 貢献
-
-Issue・Pull Requestを歓迎します！
