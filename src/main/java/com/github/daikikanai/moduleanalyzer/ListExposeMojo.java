@@ -20,6 +20,9 @@ public class ListExposeMojo extends AbstractMojo {
     @Parameter(property = "rootDir", required = true)
     private String rootDir;
 
+    @Parameter(property = "showCallers", defaultValue = "false")
+    private boolean showCallers;
+
     public void execute() throws MojoExecutionException {
         try {
             Path root = Paths.get(rootDir);
@@ -35,6 +38,18 @@ public class ListExposeMojo extends AbstractMojo {
                 return;
             }
 
+            // Collect all expose classes
+            Set<String> allExposeClasses = new HashSet<>();
+            for (List<String> classes : moduleExposeClasses.values()) {
+                allExposeClasses.addAll(classes);
+            }
+
+            // Find callers if requested
+            Map<String, List<String>> callers = new HashMap<>();
+            if (showCallers) {
+                callers = findCallers(root, allExposeClasses);
+            }
+
             // Sort modules by name
             List<String> sortedModules = new ArrayList<>(moduleExposeClasses.keySet());
             Collections.sort(sortedModules);
@@ -48,6 +63,17 @@ public class ListExposeMojo extends AbstractMojo {
 
                 for (String className : classes) {
                     getLog().info("  - " + className);
+
+                    if (showCallers && callers.containsKey(className)) {
+                        List<String> callerList = callers.get(className);
+                        if (!callerList.isEmpty()) {
+                            getLog().info("    Called by:");
+                            Collections.sort(callerList);
+                            for (String caller : callerList) {
+                                getLog().info("      - " + caller);
+                            }
+                        }
+                    }
                 }
             }
             getLog().info("");
@@ -137,5 +163,89 @@ public class ListExposeMojo extends AbstractMojo {
             }
         }
         return null;
+    }
+
+    private Map<String, List<String>> findCallers(Path root, Set<String> exposeClasses) throws IOException {
+        Map<String, List<String>> callers = new HashMap<>();
+
+        // Initialize empty lists for all expose classes
+        for (String exposeClass : exposeClasses) {
+            callers.put(exposeClass, new ArrayList<>());
+        }
+
+        // Scan all Java files
+        try (Stream<Path> paths = Files.walk(root)) {
+            paths.filter(Files::isRegularFile)
+                 .filter(path -> path.toString().endsWith(".java"))
+                 .filter(path -> !path.toString().contains("/expose/")) // Exclude expose files themselves
+                 .forEach(javaFile -> {
+                     try {
+                         String content = new String(Files.readAllBytes(javaFile));
+                         String callerClass = extractFullClassName(root, javaFile, content);
+                         String callerModule = extractModuleName(root, javaFile);
+
+                         if (callerClass != null) {
+                             for (String exposeClass : exposeClasses) {
+                                 String exposeModule = extractModuleFromClassName(exposeClass);
+
+                                 // Only add if from different module
+                                 if (!callerModule.equals(exposeModule) && isCallingClass(content, exposeClass)) {
+                                     callers.get(exposeClass).add(callerClass);
+                                 }
+                             }
+                         }
+                     } catch (IOException e) {
+                         getLog().warn("Error reading file: " + javaFile, e);
+                     }
+                 });
+        }
+
+        return callers;
+    }
+
+    private String extractModuleFromClassName(String className) {
+        // Extract module name from package (e.g., com.example.order.expose.OrderApi -> order)
+        String[] parts = className.split("\\.");
+        if (parts.length >= 3) {
+            return parts[2]; // Assuming com.example.{module}.{package}.{class}
+        }
+        return "unknown";
+    }
+
+    private String extractFullClassName(Path root, Path javaFile, String content) {
+        String packageName = extractPackageName(content);
+        if (packageName == null) {
+            return null;
+        }
+
+        String fileName = javaFile.getFileName().toString().replace(".java", "");
+        return packageName + "." + fileName;
+    }
+
+    private boolean isCallingClass(String content, String exposeClass) {
+        // Check for import statement
+        if (content.contains("import " + exposeClass + ";")) {
+            return true;
+        }
+
+        // Check for simple class name usage (after last dot)
+        String simpleClassName = exposeClass.substring(exposeClass.lastIndexOf('.') + 1);
+
+        // Look for class usage patterns
+        String[] patterns = {
+            simpleClassName + " ",
+            simpleClassName + ".",
+            simpleClassName + "(",
+            simpleClassName + "<",
+            simpleClassName + ">"
+        };
+
+        for (String pattern : patterns) {
+            if (content.contains(pattern)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
