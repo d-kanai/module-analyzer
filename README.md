@@ -167,14 +167,14 @@ modules/
 $ mvn module-analyzer:list-table -DrootDir=modules
 
 [INFO] [Module: order]
-[INFO]   - order (OrderRepository)
-[INFO]   - order_item (OrderItemRepository)
+[INFO]   - order
+[INFO]   - order_item
 [INFO]
 [INFO] [Module: product]
-[INFO]   - product (ProductRepository)
+[INFO]   - product
 [INFO]
 [INFO] [Module: user]
-[INFO]   - user (UserRepository)
-[INFO]   - user_profile (UserProfileRepository)
-[INFO]   - user_setting (UserSettingRepository)
+[INFO]   - user
+[INFO]   - user_profile
+[INFO]   - user_setting
 ```

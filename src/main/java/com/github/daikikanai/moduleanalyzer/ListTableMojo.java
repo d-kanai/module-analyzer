@@ -47,7 +47,7 @@ public class ListTableMojo extends AbstractMojo {
                 Collections.sort(tables, Comparator.comparing(t -> t.tableName));
 
                 for (TableInfo table : tables) {
-                    getLog().info("  - " + table.tableName + " (" + table.repositoryName + ")");
+                    getLog().info("  - " + table.tableName);
                 }
             }
             getLog().info("");
