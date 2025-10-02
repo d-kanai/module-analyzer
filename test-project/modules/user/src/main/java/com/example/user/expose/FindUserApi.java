@@ -1,5 +1,5 @@
 package com.example.user.expose;
 
-public class UserApi {
+public class FindUserApi {
     // Public API for User module
 }

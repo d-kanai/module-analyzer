@@ -139,6 +139,7 @@ public class ListExposeMojo extends AbstractMojo {
         try (Stream<Path> files = Files.walk(exposePath)) {
             files.filter(Files::isRegularFile)
                  .filter(path -> path.toString().endsWith(".java"))
+                 .filter(path -> !path.toString().endsWith("Dto.java"))  // Exclude Dto classes
                  .forEach(javaFile -> {
                      String className = extractClassName(exposePath, javaFile);
                      if (className != null) {

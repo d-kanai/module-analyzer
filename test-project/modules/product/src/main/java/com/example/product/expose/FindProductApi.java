@@ -1,5 +1,5 @@
 package com.example.product.expose;
 
-public class ProductApi {
+public class FindProductApi {
     // Public API for Product module
 }
