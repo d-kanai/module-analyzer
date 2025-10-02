@@ -1,7 +1,7 @@
 package com.example.product.application;
 
 
-public class ProductService {
+public class FindProductQuery {
 
     // Service implementation
 }
