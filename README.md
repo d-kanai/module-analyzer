@@ -37,11 +37,7 @@
 ## 📋 コマンド: list-expose
 
 ### 説明
-各モジュールの公開API（`expose` ディレクトリ配下のクラス）とアプリケーションクラス（`application` ディレクトリ配下のクラス）を一覧表示します。オプションでクラスごとの依存関係も表示できます。
-
-**依存関係の表示:**
-- **Exposeクラス**: `Depended by` で誰から呼ばれているかを表示
-- **Applicationクラス**: `Dependencies to` で何を呼んでいるかを表示
+各モジュールの公開API（`expose` ディレクトリ配下のクラス）と依存関係を表示します
 
 ### 実行コマンド
 ```bash
@@ -64,7 +60,7 @@ modules/
 │       └── NotificationRepository.java
 ├── order/
 │   ├── application/
-│   │   └── OrderCommand.java  # 他モジュールのAPIを使用
+│   │   └── OrderCommand.java
 │   └── infra/
 │       └── OrderRepository.java
 ├── user/
