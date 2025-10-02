@@ -39,6 +39,10 @@
 ### 説明
 各モジュールの公開API（`expose` ディレクトリ配下のJavaクラス）を一覧表示します。オプションでモジュール間の依存関係も表示できます。
 
+**注意事項:**
+- `*Dto.java` は自動的に除外されます
+- exposeクラスがないモジュールでも、依存関係がある場合は表示されます（applicationクラスを含む）
+
 ### 実行コマンド
 ```bash
 mvn module-analyzer:list-expose -DrootDir=modules
@@ -51,19 +55,34 @@ mvn module-analyzer:list-expose -DrootDir=modules
 ### プロジェクト構成例
 ```
 modules/
+├── notification/
+│   ├── expose/
+│   │   ├── SendNotificationApi.java
+│   │   └── NotificationDto.java  # Dtoは自動除外
+│   ├── application/
+│   │   └── SendNotificationCommand.java
+│   └── infra/
+│       └── NotificationRepository.java
 ├── order/
-│   ├── src/main/java/com/example/order/expose/
-│   │   ├── OrderApi.java
-│   │   └── OrderDto.java
-│   └── service/
-│       └── OrderService.java  # ProductApiとUserApiを使用
+│   ├── application/
+│   │   └── OrderCommand.java  # 他モジュールのAPIを使用
+│   └── infra/
+│       └── OrderRepository.java
 ├── user/
-│   └── src/main/java/com/example/user/expose/
-│       ├── UserApi.java
-│       └── UserDto.java
+│   ├── expose/
+│   │   ├── FindUserApi.java
+│   │   └── UserDto.java  # Dtoは自動除外
+│   ├── application/
+│   │   └── SignupCommand.java
+│   └── infra/
+│       └── UserRepository.java
 └── product/
-    └── src/main/java/com/example/product/expose/
-        └── ProductApi.java
+    ├── expose/
+    │   └── FindProductApi.java
+    ├── application/
+    │   └── FindProductQuery.java
+    └── infra/
+        └── ProductRepository.java
 ```
 
 ### 実行結果
@@ -72,16 +91,14 @@ modules/
 ```bash
 $ mvn module-analyzer:list-expose -DrootDir=modules
 
-[INFO] [Module: order]
-[INFO]   - com.example.order.expose.OrderApi
-[INFO]   - com.example.order.expose.OrderDto
+[INFO] [Module: notification]
+[INFO]   - com.example.notification.expose.SendNotificationApi
 [INFO]
 [INFO] [Module: product]
-[INFO]   - com.example.product.expose.ProductApi
+[INFO]   - com.example.product.expose.FindProductApi
 [INFO]
 [INFO] [Module: user]
-[INFO]   - com.example.user.expose.UserApi
-[INFO]   - com.example.user.expose.UserDto
+[INFO]   - com.example.user.expose.FindUserApi
 ```
 
 #### showDependency オプション（依存関係を表示）
@@ -89,30 +106,29 @@ $ mvn module-analyzer:list-expose -DrootDir=modules
 $ mvn module-analyzer:list-expose -DrootDir=modules -DshowDependency=true
 
 [INFO] [Module: notification]
-[INFO]   - com.example.notification.expose.NotificationApi
-[INFO]   - com.example.notification.expose.NotificationDto
+[INFO]   - com.example.notification.expose.SendNotificationApi
 [INFO]   Depended by:
-[INFO]     - user
+[INFO]     - order: OrderCommand
+[INFO]     - user: SignupCommand
 [INFO]
 [INFO] [Module: order]
-[INFO]   - com.example.order.expose.OrderApi
-[INFO]   - com.example.order.expose.OrderDto
+[INFO]   - com.example.order.application.OrderCommand
 [INFO]   Dependencies to:
-[INFO]     - product
-[INFO]     - user
+[INFO]     - notification: SendNotificationApi
+[INFO]     - product: FindProductApi
+[INFO]     - user: FindUserApi
 [INFO]
 [INFO] [Module: product]
-[INFO]   - com.example.product.expose.ProductApi
+[INFO]   - com.example.product.expose.FindProductApi
 [INFO]   Depended by:
-[INFO]     - order
+[INFO]     - order: OrderCommand
 [INFO]
 [INFO] [Module: user]
-[INFO]   - com.example.user.expose.UserApi
-[INFO]   - com.example.user.expose.UserDto
+[INFO]   - com.example.user.expose.FindUserApi
 [INFO]   Dependencies to:
-[INFO]     - notification
+[INFO]     - notification: SendNotificationApi
 [INFO]   Depended by:
-[INFO]     - order
+[INFO]     - order: OrderCommand
 ```
 
 ---

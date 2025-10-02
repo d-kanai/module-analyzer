@@ -106,7 +106,7 @@ public class ListExposeMojo extends AbstractMojo {
                                 String classNames = sortedClasses.stream()
                                     .map(c -> c.substring(c.lastIndexOf('.') + 1))
                                     .collect(Collectors.joining(", "));
-                                getLog().info("    - " + targetModule + " (" + classNames + ")");
+                                getLog().info("    - " + targetModule + ": " + classNames);
                             }
                         }
                     }
@@ -125,7 +125,7 @@ public class ListExposeMojo extends AbstractMojo {
                                 String classNames = sortedClasses.stream()
                                     .map(c -> c.substring(c.lastIndexOf('.') + 1))
                                     .collect(Collectors.joining(", "));
-                                getLog().info("    - " + from + " (" + classNames + ")");
+                                getLog().info("    - " + from + ": " + classNames);
                             }
                         }
                     }
