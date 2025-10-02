@@ -37,11 +37,11 @@
 ## 📋 コマンド: list-expose
 
 ### 説明
-各モジュールの公開API（`expose` ディレクトリ配下のJavaクラス）を一覧表示します。オプションでモジュール間の依存関係も表示できます。
+各モジュールの公開API（`expose` ディレクトリ配下のクラス）とアプリケーションクラス（`application` ディレクトリ配下のクラス）を一覧表示します。オプションでクラスごとの依存関係も表示できます。
 
-**注意事項:**
-- `*Dto.java` は自動的に除外されます
-- exposeクラスがないモジュールでも、依存関係がある場合は表示されます（applicationクラスを含む）
+**依存関係の表示:**
+- **Exposeクラス**: `Depended by` で誰から呼ばれているかを表示
+- **Applicationクラス**: `Dependencies to` で何を呼んでいるかを表示
 
 ### 実行コマンド
 ```bash
@@ -50,15 +50,14 @@ mvn module-analyzer:list-expose -DrootDir=modules
 
 ### パラメータ
 - `rootDir`: モジュールのルートディレクトリパス（必須）
-- `showDependency`: モジュール間の依存関係を表示（デフォルト: false）
+- `showDependency`: クラスごとの依存関係を表示（デフォルト: false）
 
 ### プロジェクト構成例
 ```
 modules/
 ├── notification/
 │   ├── expose/
-│   │   ├── SendNotificationApi.java
-│   │   └── NotificationDto.java  # Dtoは自動除外
+│   │   └── SendNotificationApi.java
 │   ├── application/
 │   │   └── SendNotificationCommand.java
 │   └── infra/
@@ -70,8 +69,7 @@ modules/
 │       └── OrderRepository.java
 ├── user/
 │   ├── expose/
-│   │   ├── FindUserApi.java
-│   │   └── UserDto.java  # Dtoは自動除外
+│   │   └── FindUserApi.java
 │   ├── application/
 │   │   └── SignupCommand.java
 │   └── infra/
@@ -107,28 +105,29 @@ $ mvn module-analyzer:list-expose -DrootDir=modules -DshowDependency=true
 
 [INFO] [Module: notification]
 [INFO]   - com.example.notification.expose.SendNotificationApi
-[INFO]   Depended by:
-[INFO]     - order: OrderCommand
-[INFO]     - user: SignupCommand
+[INFO]     Depended by:
+[INFO]       - order: OrderCommand
+[INFO]       - user: SignupCommand
 [INFO]
 [INFO] [Module: order]
 [INFO]   - com.example.order.application.OrderCommand
-[INFO]   Dependencies to:
-[INFO]     - notification: SendNotificationApi
-[INFO]     - product: FindProductApi
-[INFO]     - user: FindUserApi
+[INFO]     Dependencies to:
+[INFO]       - notification: SendNotificationApi
+[INFO]       - product: FindProductApi
+[INFO]       - user: FindUserApi
 [INFO]
 [INFO] [Module: product]
 [INFO]   - com.example.product.expose.FindProductApi
-[INFO]   Depended by:
-[INFO]     - order: OrderCommand
+[INFO]     Depended by:
+[INFO]       - order: OrderCommand
 [INFO]
 [INFO] [Module: user]
 [INFO]   - com.example.user.expose.FindUserApi
-[INFO]   Dependencies to:
-[INFO]     - notification: SendNotificationApi
-[INFO]   Depended by:
-[INFO]     - order: OrderCommand
+[INFO]     Depended by:
+[INFO]       - order: OrderCommand
+[INFO]   - com.example.user.application.SignupCommand
+[INFO]     Dependencies to:
+[INFO]       - notification: SendNotificationApi
 ```
 
 ---
