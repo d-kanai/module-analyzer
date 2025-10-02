@@ -1,16 +1,17 @@
 # 🔍 Module Analyzer Maven Plugin
 
-モジュラモノリス構成のプロジェクトにおいて、各モジュールの公開API（expose）を可視化するMavenプラグインです。
+モジュラモノリス構成のプロジェクトを分析するためのMavenプラグインです。
 
 ## ✨ 機能
 
-### 📋 公開API一覧表示
+このプラグインは、モジュラモノリスプロジェクトの構造を可視化する2つのコマンドを提供します：
 
-各モジュールの `expose` ディレクトリ配下にあるJavaクラスを一覧表示します。
+| コマンド | 説明 |
+|---------|------|
+| 📋 `list-expose` | 各モジュールの公開API（exposeディレクトリ配下のクラス）を一覧表示 |
+| 🗄️ `list-table` | 各モジュールのテーブル一覧（Repositoryから推測）を表示 |
 
-## 🚀 使い方
-
-### インストール
+## 🚀 インストール
 
 `pom.xml` に以下を追加：
 
@@ -33,19 +34,20 @@
 </build>
 ```
 
-### コマンド実行
+## 📋 コマンド: list-expose
 
+### 説明
+各モジュールの公開API（`expose` ディレクトリ配下のJavaクラス）を一覧表示します。
+
+### 実行コマンド
 ```bash
 mvn module-analyzer:list-expose -DrootDir=modules
 ```
 
-**パラメータ:**
+### パラメータ
 - `rootDir`: モジュールのルートディレクトリパス（必須）
 
-## 📊 実行例
-
-### プロジェクト構成
-
+### プロジェクト構成例
 ```
 modules/
 ├── order/
@@ -62,12 +64,9 @@ modules/
 ```
 
 ### 実行結果
-
 ```bash
 $ mvn module-analyzer:list-expose -DrootDir=modules
 
-[INFO] --- module-analyzer:v1.0.3-SNAPSHOT:list-expose (default-cli) @ test-project ---
-[INFO]
 [INFO] [Module: order]
 [INFO]   - com.example.order.expose.OrderApi
 [INFO]   - com.example.order.expose.OrderDto
@@ -78,9 +77,53 @@ $ mvn module-analyzer:list-expose -DrootDir=modules
 [INFO] [Module: user]
 [INFO]   - com.example.user.expose.UserApi
 [INFO]   - com.example.user.expose.UserDto
-[INFO]
-[INFO] ------------------------------------------------------------------------
-[INFO] BUILD SUCCESS
-[INFO] ------------------------------------------------------------------------
 ```
 
+---
+
+## 🗄️ コマンド: list-table
+
+### 説明
+各モジュールのテーブル一覧を表示します。`XxxRepository` というクラス名から対応するテーブル名（スネークケース）を推測します。
+
+### 実行コマンド
+```bash
+mvn module-analyzer:list-table -DrootDir=modules
+```
+
+### パラメータ
+- `rootDir`: モジュールのルートディレクトリパス（必須）
+
+### プロジェクト構成例
+```
+modules/
+├── order/
+│   └── infra/
+│       ├── OrderRepository.java
+│       └── OrderItemRepository.java
+├── user/
+│   └── infra/
+│       ├── UserRepository.java
+│       ├── UserProfileRepository.java
+│       └── UserSettingRepository.java
+└── product/
+    └── infra/
+        └── ProductRepository.java
+```
+
+### 実行結果
+```bash
+$ mvn module-analyzer:list-table -DrootDir=modules
+
+[INFO] [Module: order]
+[INFO]   - order (OrderRepository)
+[INFO]   - order_item (OrderItemRepository)
+[INFO]
+[INFO] [Module: product]
+[INFO]   - product (ProductRepository)
+[INFO]
+[INFO] [Module: user]
+[INFO]   - user (UserRepository)
+[INFO]   - user_profile (UserProfileRepository)
+[INFO]   - user_setting (UserSettingRepository)
+```
