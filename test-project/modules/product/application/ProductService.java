@@ -1,4 +1,4 @@
-package com.example.product.service;
+package com.example.product.application;
 
 
 public class ProductService {

@@ -43,9 +43,11 @@ public class ListExposeMojo extends AbstractMojo {
             // Build module dependencies with class details
             Map<String, Map<String, Set<String>>> moduleDependencies = new HashMap<>();
             Map<String, Map<String, Set<String>>> moduleDependenciesFrom = new HashMap<>();
+            Map<String, Set<String>> moduleCallerClasses = new HashMap<>();
             if (showDependency) {
                 moduleDependencies = buildModuleDependencies(root, allExposeClasses, allModules);
                 moduleDependenciesFrom = buildModuleDependenciesFrom(root, allExposeClasses, allModules);
+                moduleCallerClasses = buildModuleCallerClasses(root, allExposeClasses, allModules);
             }
 
             // Collect modules to display: modules with expose classes OR modules with dependencies
@@ -69,14 +71,25 @@ public class ListExposeMojo extends AbstractMojo {
 
             for (String module : sortedModules) {
                 getLog().info("");
-                getLog().info("[Module: " + module + "]");
 
                 List<String> classes = moduleExposeClasses.get(module);
                 if (classes != null) {
-                    Collections.sort(classes);
+                    // Module has expose classes
                     for (String className : classes) {
                         getLog().info("  - " + className);
                     }
+                    getLog().info("[Module: " + module + "]");
+                } else {
+                    // Module has no expose classes, show caller classes
+                    if (moduleCallerClasses.containsKey(module)) {
+                        Set<String> callerClasses = moduleCallerClasses.get(module);
+                        List<String> sortedCallers = new ArrayList<>(callerClasses);
+                        Collections.sort(sortedCallers);
+                        for (String callerClass : sortedCallers) {
+                            getLog().info("  - " + callerClass);
+                        }
+                    }
+                    getLog().info("[Module: " + module + "]");
                 }
 
                 if (showDependency) {
@@ -301,6 +314,49 @@ public class ListExposeMojo extends AbstractMojo {
         }
 
         return dependenciesFrom;
+    }
+
+    private Map<String, Set<String>> buildModuleCallerClasses(Path root, Set<String> exposeClasses, Set<String> allModules) throws IOException {
+        // Map: callerModule -> Set of caller classes
+        Map<String, Set<String>> callerClasses = new HashMap<>();
+
+        // Initialize empty sets for all modules
+        for (String module : allModules) {
+            callerClasses.put(module, new HashSet<>());
+        }
+
+        // Scan all Java files
+        try (Stream<Path> paths = Files.walk(root)) {
+            paths.filter(Files::isRegularFile)
+                 .filter(path -> path.toString().endsWith(".java"))
+                 .filter(path -> !path.toString().contains("/expose/")) // Exclude expose files themselves
+                 .forEach(javaFile -> {
+                     try {
+                         String content = new String(Files.readAllBytes(javaFile));
+                         String callerModule = extractModuleName(root, javaFile);
+                         String callerClass = extractFullClassName(root, javaFile, content);
+
+                         if (callerModule != null && !callerModule.equals("unknown") && callerClass != null) {
+                             // Check if this class calls any expose class from other modules
+                             boolean callsOtherModule = false;
+                             for (String exposeClass : exposeClasses) {
+                                 String exposeModule = extractModuleFromClassName(exposeClass);
+                                 if (!callerModule.equals(exposeModule) && isCallingClass(content, exposeClass)) {
+                                     callsOtherModule = true;
+                                     break;
+                                 }
+                             }
+                             if (callsOtherModule) {
+                                 callerClasses.get(callerModule).add(callerClass);
+                             }
+                         }
+                     } catch (IOException e) {
+                         getLog().warn("Error reading file: " + javaFile, e);
+                     }
+                 });
+        }
+
+        return callerClasses;
     }
 
     private String extractModuleFromClassName(String className) {

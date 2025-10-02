@@ -1,4 +1,4 @@
-package com.example.order.service;
+package com.example.order.application;
 
 import com.example.product.expose.FindProductApi;
 import com.example.user.expose.FindUserApi;

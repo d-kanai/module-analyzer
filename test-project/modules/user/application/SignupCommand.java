@@ -1,4 +1,4 @@
-package com.example.user.service;
+package com.example.user.application;
 
 import com.example.notification.expose.SendNotificationApi;
 
