@@ -67,7 +67,39 @@ public class ListExposeMojo extends AbstractMojo {
 
             for (String module : sortedModules) {
                 getLog().info("");
-                getLog().info("[Module: " + module + "]");
+
+                // Calculate module-level dependency counts
+                Set<String> dependenciesToModules = new HashSet<>();
+                Set<String> dependedByModules = new HashSet<>();
+
+                if (showDependency) {
+                    // Count Dependencies to (from application classes)
+                    if (moduleCallerClasses.containsKey(module)) {
+                        for (String callerClass : moduleCallerClasses.get(module)) {
+                            if (classDependenciesTo.containsKey(callerClass)) {
+                                dependenciesToModules.addAll(classDependenciesTo.get(callerClass).keySet());
+                            }
+                        }
+                    }
+
+                    // Count Depended by (to expose classes)
+                    List<String> exposeClassList = moduleExposeClasses.get(module);
+                    if (exposeClassList != null) {
+                        for (String exposeClass : exposeClassList) {
+                            if (classDependenciesFrom.containsKey(exposeClass)) {
+                                dependedByModules.addAll(classDependenciesFrom.get(exposeClass).keySet());
+                            }
+                        }
+                    }
+                }
+
+                // Display module header with counts
+                String moduleHeader = "[Module: " + module + "]";
+                if (showDependency && (!dependenciesToModules.isEmpty() || !dependedByModules.isEmpty())) {
+                    moduleHeader += " (Dependencies to: " + dependenciesToModules.size() +
+                                   ", Depended by: " + dependedByModules.size() + ")";
+                }
+                getLog().info(moduleHeader);
 
                 // Show expose classes and their dependencies from
                 List<String> exposeClasses = moduleExposeClasses.get(module);
