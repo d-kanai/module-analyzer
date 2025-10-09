@@ -106,7 +106,7 @@ public class ModuleView {
             boolean showDependency) {
 
         String moduleHeader = "[Module: " + module + "]";
-        if (showDependency && (!dependenciesToModules.isEmpty() || !dependedByModules.isEmpty())) {
+        if (showDependency) {
             moduleHeader += " (Dependencies to: " + dependenciesToModules.size() +
                            ", Depended by: " + dependedByModules.size() + ")";
         }

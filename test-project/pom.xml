@@ -8,19 +8,15 @@
     <artifactId>test-project</artifactId>
     <version>1.0-SNAPSHOT</version>
 
-    <pluginRepositories>
-        <pluginRepository>
-            <id>jitpack.io</id>
-            <url>https://jitpack.io</url>
-        </pluginRepository>
-    </pluginRepositories>
-
     <build>
         <plugins>
             <plugin>
                 <groupId>com.github.d-kanai</groupId>
                 <artifactId>module-analyzer</artifactId>
-                <version>v1.0.4</version>
+                <version>v1.0.5</version>
+                <configuration>
+                    <rootDir>${project.basedir}/modules</rootDir>
+                </configuration>
             </plugin>
         </plugins>
     </build>
