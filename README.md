@@ -4,12 +4,13 @@
 
 ## ✨ 機能
 
-このプラグインは、モジュラモノリスプロジェクトの構造を可視化する2つのコマンドを提供します：
+このプラグインは、モジュラモノリスプロジェクトの構造を可視化する3つのコマンドを提供します：
 
 | コマンド | 説明 |
 |---------|------|
 | 📋 `list-expose` | 各モジュールの公開API（exposeディレクトリ配下のクラス）を一覧表示 |
 | 🗄️ `list-table` | 各モジュールのテーブル一覧（Repositoryから推測）を表示 |
+| 🌐 `list-http-request` | applicationレイヤからのHTTPリクエストを追跡して一覧表示 |
 
 ## 🚀 インストール
 
@@ -173,4 +174,108 @@ $ mvn module-analyzer:list-table -DrootDir=modules
 [INFO]   - user
 [INFO]   - user_profile
 [INFO]   - user_setting
+```
+
+---
+
+## 🌐 コマンド: list-http-request
+
+### 説明
+applicationレイヤのメソッドから外部HTTPリクエスト（`client.post`, `client.get`）までの呼び出しを追跡し、どのapplicationレイヤのメソッドがHTTP通信を行っているかを一覧表示します。
+
+### 実行コマンド
+```bash
+mvn module-analyzer:list-http-request -DrootDir=modules
+```
+
+### パラメータ
+- `rootDir`: モジュールのルートディレクトリパス（必須）
+- `searchPatterns`: 検索するパターン（デフォルト: `client.post,client.get`）
+
+### プロジェクト構成例
+```
+modules/
+├── order/
+│   ├── application/
+│   │   └── OrderCommand.java         # applicationレイヤ
+│   ├── domain/
+│   │   └── OrderService.java         # 中間レイヤ
+│   └── infra/
+│       ├── OrderRepository.java      # infraレイヤ
+│       └── Client.java               # HTTPクライアント
+└── product/
+    ├── application/
+    │   └── ProductCommand.java
+    └── infra/
+        ├── ProductRepository.java
+        └── Client.java
+```
+
+### 実行結果
+```bash
+$ mvn module-analyzer:list-http-request -DrootDir=modules
+
+[INFO] Scanning modules in: modules
+[INFO] Target subdirectory: application
+[INFO] Searching for patterns: client.post, client.get
+[INFO]
+[INFO] [Module: order]
+[INFO]   - OrderCommand.createOrder -> /api/orders
+[INFO]   - OrderCommand.placeOrder -> https://orders.example.com/api/orders/save
+[INFO]   - OrderCommand.submitOrder -> https://orders.example.com/api/orders/save
+[INFO]
+[INFO] [Module: product]
+[INFO]   - ProductCommand.createProduct -> https://api.example.com/api/products
+[INFO]   - ProductCommand.updateProduct -> https://api.example.com/api/products/update
+[INFO]   - ProductCommand.getProduct -> https://api.example.com/api/products/123
+[INFO]   - ProductCommand.listProducts -> https://api.example.com/api/products
+```
+
+### 機能詳細
+
+#### 依存関係の追跡
+以下のような複数階層の呼び出しを自動追跡します：
+
+```java
+// 1. 直接呼び出し（0階層）
+class OrderCommand {
+    public void createOrder() {
+        client.post("/api/orders", data);  // ← 検出
+    }
+}
+
+// 2. 1階層経由
+class OrderCommand {
+    public void placeOrder() {
+        orderRepository.save(data);  // → OrderRepository → client.post
+    }
+}
+
+// 3. 2階層経由
+class OrderCommand {
+    public void submitOrder() {
+        orderService.process(data);  // → OrderService → OrderRepository → client.post
+    }
+}
+```
+
+#### URL解析
+変数・定数の連結を自動解決：
+
+```java
+private static final String BASE_URL = "https://api.example.com";
+private static final String PATH = "/api/products";
+
+public void createProduct() {
+    client.post(BASE_URL + PATH, data);
+    // → 出力: https://api.example.com/api/products
+}
+```
+
+#### エラー耐性
+パース失敗時もエラーを表示して処理を継続：
+
+```java
+client.post(  // 引数が不完全
+// → 出力: OrderCommand.brokenMethod -> [Parse Error: ...]
 ```
