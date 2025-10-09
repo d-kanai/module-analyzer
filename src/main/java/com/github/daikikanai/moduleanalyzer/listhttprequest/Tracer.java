@@ -53,7 +53,7 @@ public class Tracer {
         return result;
     }
 
-    public Result traceModulesSubDir(Path root, String targetSubDir, String searchPattern) throws IOException {
+    public Result traceModulesSubDir(Path root, String targetSubDir, List<String> searchPatterns) throws IOException {
         // Build class file map first
         buildClassFileMap();
 
@@ -62,22 +62,167 @@ public class Tracer {
         // Find all subdirectories matching targetSubDir in all modules
         List<Path> targetDirs = findSubDirectories(root, targetSubDir);
 
-        // For each matching directory, find all classes and trace them
-        for (Path targetDir : targetDirs) {
-            // Extract module name from path (parent of targetSubDir)
-            String moduleName = extractModuleName(targetDir, root);
+        // First, find all classes that contain the search patterns
+        Map<String, List<MatchInfo>> patternMatches = new HashMap<>();
 
+        try (Stream<Path> paths = Files.walk(root)) {
+            paths.filter(Files::isRegularFile)
+                 .filter(path -> path.toString().endsWith(".java"))
+                 .forEach(javaFile -> {
+                     try {
+                         String content = new String(Files.readAllBytes(javaFile));
+                         String fullClassName = extractFullClassName(javaFile, content);
+                         if (fullClassName != null) {
+                             // Check for each search pattern
+                             for (String searchPattern : searchPatterns) {
+                                 List<Integer> matchingLines = findAllLineNumbers(content, searchPattern);
+                                 if (!matchingLines.isEmpty()) {
+                                     patternMatches.computeIfAbsent(fullClassName, k -> new ArrayList<>())
+                                         .add(new MatchInfo(searchPattern, matchingLines, content));
+                                 }
+                             }
+                         }
+                     } catch (IOException e) {
+                         log.warn("Failed to read file: " + javaFile);
+                     }
+                 });
+        }
+
+        // For each application layer class, trace backwards to find pattern matches
+        for (Path targetDir : targetDirs) {
+            String moduleName = extractModuleName(targetDir, root);
             List<String> targetClasses = findClassesInDirectory(targetDir);
 
-            // Trace each class independently
-            for (String className : targetClasses) {
-                Set<String> visited = new HashSet<>();
-                List<String> currentChain = new ArrayList<>();
-                traceRecursive(className, searchPattern, currentChain, visited, result, moduleName);
+            for (String appClassName : targetClasses) {
+                // Trace from application class to find if it reaches any pattern match
+                traceForwardToPatterns(appClassName, patternMatches, new HashSet<>(),
+                                      new ArrayList<>(), result, moduleName);
             }
         }
 
         return result;
+    }
+
+    private static class MatchInfo {
+        String pattern;
+        List<Integer> lineNumbers;
+        String fileContent;
+
+        MatchInfo(String pattern, List<Integer> lineNumbers, String fileContent) {
+            this.pattern = pattern;
+            this.lineNumbers = lineNumbers;
+            this.fileContent = fileContent;
+        }
+    }
+
+    private void traceForwardToPatterns(String className, Map<String, List<MatchInfo>> patternMatches,
+                                       Set<String> visited, List<String> currentChain,
+                                       Result result, String moduleName) throws IOException {
+        if (visited.contains(className)) {
+            return;
+        }
+        visited.add(className);
+        currentChain.add(className);
+
+        Path classFile = classFileMap.get(className);
+        if (classFile == null) {
+            currentChain.remove(currentChain.size() - 1);
+            return;
+        }
+
+        String content = new String(Files.readAllBytes(classFile));
+
+        // Check if this class has pattern matches
+        if (patternMatches.containsKey(className)) {
+            List<MatchInfo> matches = patternMatches.get(className);
+
+            // The first element in currentChain is the application layer class
+            String appClassName = currentChain.get(0);
+
+            for (MatchInfo match : matches) {
+                for (int lineNumber : match.lineNumbers) {
+                    try {
+                        String lineContent = extractLine(match.fileContent, lineNumber);
+                        String methodName = extractMethodNameAtLine(match.fileContent, lineNumber);
+                        String urlExpression = extractFirstArgument(lineContent, match.pattern);
+                        String url = resolveUrlExpression(urlExpression, match.fileContent);
+
+                        // Determine the application layer method name
+                        String appMethodName;
+                        if (className.equals(appClassName)) {
+                            // Direct call from application layer
+                            appMethodName = methodName;
+                        } else {
+                            // Called through dependency - trace back through the chain
+                            appMethodName = findCallingMethodInAppLayer(appClassName, currentChain);
+                        }
+
+                        result.addPath(new Result.TracePath(currentChain, appClassName, lineNumber,
+                                      lineContent, appMethodName, moduleName, url));
+                    } catch (Exception e) {
+                        log.warn("Failed to parse line " + lineNumber + " in " + className + ": " + e.getMessage());
+                    }
+                }
+            }
+        }
+
+        // Continue tracing through dependencies
+        Set<String> dependencies = extractDependencies(content);
+        for (String dependency : dependencies) {
+            if (classFileMap.containsKey(dependency)) {
+                traceForwardToPatterns(dependency, patternMatches, visited, currentChain, result, moduleName);
+            }
+        }
+
+        currentChain.remove(currentChain.size() - 1);
+    }
+
+    private String findCallingMethodInAppLayer(String appClassName, List<String> chain) throws IOException {
+        Path appClassFile = classFileMap.get(appClassName);
+        if (appClassFile == null) {
+            return "unknown";
+        }
+
+        String content = new String(Files.readAllBytes(appClassFile));
+        String[] lines = content.split("\n");
+
+        // chain is: [AppClass, IntermediateClass1, IntermediateClass2, ..., FinalClass]
+        // We need to find which method in AppClass calls IntermediateClass1
+        if (chain.size() < 2) {
+            return "unknown";
+        }
+
+        String nextClassName = chain.get(1);
+        String simpleNextClassName = nextClassName.substring(nextClassName.lastIndexOf('.') + 1);
+
+        // Find field of type nextClassName
+        Pattern fieldPattern = Pattern.compile("\\b" + simpleNextClassName + "\\s+(\\w+)\\s*;");
+        Set<String> fieldNames = new HashSet<>();
+        for (String line : lines) {
+            Matcher fieldMatcher = fieldPattern.matcher(line);
+            if (fieldMatcher.find()) {
+                fieldNames.add(fieldMatcher.group(1));
+            }
+        }
+
+        // Find method calls using those field names
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            for (String fieldName : fieldNames) {
+                // Look for pattern: fieldName.anyMethod(
+                Pattern callPattern = Pattern.compile("\\b" + Pattern.quote(fieldName) + "\\.\\w+\\s*\\(");
+                Matcher matcher = callPattern.matcher(line);
+                if (matcher.find()) {
+                    // Found a call, now find which method contains this call
+                    String callingMethod = extractMethodNameAtLine(content, i + 1);
+                    if (!callingMethod.equals("unknown")) {
+                        return callingMethod;
+                    }
+                }
+            }
+        }
+
+        return "unknown";
     }
 
     private String extractModuleName(Path targetDir, Path root) {
@@ -165,11 +310,20 @@ public class Tracer {
         // Find all occurrences of the search pattern in this class
         List<Integer> matchingLines = findAllLineNumbers(content, searchPattern);
         for (int lineNumber : matchingLines) {
-            String lineContent = extractLine(content, lineNumber);
-            String methodName = extractMethodNameAtLine(content, lineNumber);
-            String urlExpression = extractFirstArgument(lineContent, searchPattern);
-            String url = resolveUrlExpression(urlExpression, content);
-            result.addPath(new Result.TracePath(currentChain, className, lineNumber, lineContent, methodName, moduleName, url));
+            try {
+                String lineContent = extractLine(content, lineNumber);
+                String methodName = extractMethodNameAtLine(content, lineNumber);
+                String urlExpression = extractFirstArgument(lineContent, searchPattern);
+                String url = resolveUrlExpression(urlExpression, content);
+                result.addPath(new Result.TracePath(currentChain, className, lineNumber, lineContent, methodName, moduleName, url));
+            } catch (Exception e) {
+                // Fail-safe: Log error but continue processing
+                log.warn("Failed to parse line " + lineNumber + " in " + className + ": " + e.getMessage());
+                String lineContent = extractLine(content, lineNumber);
+                String methodName = "ERROR";
+                String url = "[Parse Error: " + e.getMessage() + "]";
+                result.addPath(new Result.TracePath(currentChain, className, lineNumber, lineContent, methodName, moduleName, url));
+            }
         }
 
         // Find all classes this class depends on
@@ -320,108 +474,120 @@ public class Tracer {
     }
 
     private String extractFirstArgument(String lineContent, String searchPattern) {
-        // Find the position of the search pattern (e.g., "client.post")
-        int patternIndex = lineContent.toLowerCase().indexOf(searchPattern.toLowerCase());
-        if (patternIndex == -1) {
-            return "";
+        try {
+            // Find the position of the search pattern (e.g., "client.post")
+            int patternIndex = lineContent.toLowerCase().indexOf(searchPattern.toLowerCase());
+            if (patternIndex == -1) {
+                return "";
+            }
+
+            // Find the opening parenthesis after the pattern
+            int openParenIndex = lineContent.indexOf('(', patternIndex);
+            if (openParenIndex == -1) {
+                return "";
+            }
+
+            // Extract the first argument (URL)
+            int startIndex = openParenIndex + 1;
+            String afterParen = lineContent.substring(startIndex).trim();
+
+            // Find the end of the first argument
+            int commaIndex = afterParen.indexOf(',');
+            int closeParenIndex = afterParen.indexOf(')');
+
+            int endIndex;
+            if (commaIndex != -1 && (closeParenIndex == -1 || commaIndex < closeParenIndex)) {
+                endIndex = commaIndex;
+            } else if (closeParenIndex != -1) {
+                endIndex = closeParenIndex;
+            } else {
+                return "";
+            }
+
+            String firstArg = afterParen.substring(0, endIndex).trim();
+            return firstArg;
+        } catch (Exception e) {
+            return "[Error extracting argument]";
         }
-
-        // Find the opening parenthesis after the pattern
-        int openParenIndex = lineContent.indexOf('(', patternIndex);
-        if (openParenIndex == -1) {
-            return "";
-        }
-
-        // Extract the first argument (URL)
-        int startIndex = openParenIndex + 1;
-        String afterParen = lineContent.substring(startIndex).trim();
-
-        // Find the end of the first argument
-        int commaIndex = afterParen.indexOf(',');
-        int closeParenIndex = afterParen.indexOf(')');
-
-        int endIndex;
-        if (commaIndex != -1 && (closeParenIndex == -1 || commaIndex < closeParenIndex)) {
-            endIndex = commaIndex;
-        } else if (closeParenIndex != -1) {
-            endIndex = closeParenIndex;
-        } else {
-            return "";
-        }
-
-        String firstArg = afterParen.substring(0, endIndex).trim();
-        return firstArg;
     }
 
     private String resolveUrlExpression(String expression, String fileContent) {
-        expression = expression.trim();
+        try {
+            expression = expression.trim();
 
-        // If it's a simple string literal, return it
-        Pattern literalPattern = Pattern.compile("^[\"']([^\"']*)[\"']$");
-        Matcher literalMatcher = literalPattern.matcher(expression);
-        if (literalMatcher.matches()) {
-            return literalMatcher.group(1);
-        }
-
-        // Handle concatenation (e.g., HOST + "/api/orders" + SUFFIX)
-        if (expression.contains("+")) {
-            StringBuilder result = new StringBuilder();
-            String[] parts = expression.split("\\+");
-
-            for (String part : parts) {
-                part = part.trim();
-
-                // Check if it's a string literal
-                Matcher partLiteralMatcher = literalPattern.matcher(part);
-                if (partLiteralMatcher.matches()) {
-                    result.append(partLiteralMatcher.group(1));
-                } else {
-                    // It's a variable or constant - try to resolve it
-                    String value = resolveVariable(part, fileContent);
-                    if (value != null) {
-                        result.append(value);
-                    } else {
-                        result.append("{").append(part).append("}");
-                    }
-                }
+            // If it's a simple string literal, return it
+            Pattern literalPattern = Pattern.compile("^[\"']([^\"']*)[\"']$");
+            Matcher literalMatcher = literalPattern.matcher(expression);
+            if (literalMatcher.matches()) {
+                return literalMatcher.group(1);
             }
 
-            return result.toString();
-        }
+            // Handle concatenation (e.g., HOST + "/api/orders" + SUFFIX)
+            if (expression.contains("+")) {
+                StringBuilder result = new StringBuilder();
+                String[] parts = expression.split("\\+");
 
-        // Single variable/constant
-        String value = resolveVariable(expression, fileContent);
-        if (value != null) {
-            return value;
-        }
+                for (String part : parts) {
+                    part = part.trim();
 
-        return "{" + expression + "}";
+                    // Check if it's a string literal
+                    Matcher partLiteralMatcher = literalPattern.matcher(part);
+                    if (partLiteralMatcher.matches()) {
+                        result.append(partLiteralMatcher.group(1));
+                    } else {
+                        // It's a variable or constant - try to resolve it
+                        String value = resolveVariable(part, fileContent);
+                        if (value != null) {
+                            result.append(value);
+                        } else {
+                            result.append("{").append(part).append("}");
+                        }
+                    }
+                }
+
+                return result.toString();
+            }
+
+            // Single variable/constant
+            String value = resolveVariable(expression, fileContent);
+            if (value != null) {
+                return value;
+            }
+
+            return "{" + expression + "}";
+        } catch (Exception e) {
+            return "[Error resolving: " + expression + "]";
+        }
     }
 
     private String resolveVariable(String varName, String fileContent) {
-        varName = varName.trim();
+        try {
+            varName = varName.trim();
 
-        // Look for constant/field declarations
-        // Pattern: private/public static final String VARNAME = "value";
-        Pattern constantPattern = Pattern.compile(
-            "(?:private|public|protected)?\\s*(?:static)?\\s*(?:final)?\\s*String\\s+" +
-            Pattern.quote(varName) + "\\s*=\\s*[\"']([^\"']*)[\"']"
-        );
-        Matcher matcher = constantPattern.matcher(fileContent);
-        if (matcher.find()) {
-            return matcher.group(1);
+            // Look for constant/field declarations
+            // Pattern: private/public static final String VARNAME = "value";
+            Pattern constantPattern = Pattern.compile(
+                "(?:private|public|protected)?\\s*(?:static)?\\s*(?:final)?\\s*String\\s+" +
+                Pattern.quote(varName) + "\\s*=\\s*[\"']([^\"']*)[\"']"
+            );
+            Matcher matcher = constantPattern.matcher(fileContent);
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+
+            // Look for simple variable assignments
+            // Pattern: String varName = "value";
+            Pattern varPattern = Pattern.compile(
+                "String\\s+" + Pattern.quote(varName) + "\\s*=\\s*[\"']([^\"']*)[\"']"
+            );
+            Matcher varMatcher = varPattern.matcher(fileContent);
+            if (varMatcher.find()) {
+                return varMatcher.group(1);
+            }
+
+            return null;
+        } catch (Exception e) {
+            return null;
         }
-
-        // Look for simple variable assignments
-        // Pattern: String varName = "value";
-        Pattern varPattern = Pattern.compile(
-            "String\\s+" + Pattern.quote(varName) + "\\s*=\\s*[\"']([^\"']*)[\"']"
-        );
-        Matcher varMatcher = varPattern.matcher(fileContent);
-        if (varMatcher.find()) {
-            return varMatcher.group(1);
-        }
-
-        return null;
     }
 }

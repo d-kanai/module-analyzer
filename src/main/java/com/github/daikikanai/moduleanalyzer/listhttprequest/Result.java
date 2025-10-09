@@ -12,8 +12,8 @@ public class Result {
     }
 
     public void addPath(TracePath path) {
-        // Create unique key: className.methodName
-        String key = path.getMatchedClass() + "." + path.getMethodName();
+        // Create unique key: className.methodName.url (to allow same method calling different URLs)
+        String key = path.getMatchedClass() + "." + path.getMethodName() + ":" + path.getUrl();
 
         // Only add if not already seen
         if (!seenMatches.contains(key)) {

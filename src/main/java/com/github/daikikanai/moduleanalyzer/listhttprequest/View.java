@@ -11,9 +11,9 @@ public class View {
         this.log = log;
     }
 
-    public void displayResult(Result result, String searchPattern) {
+    public void displayResult(Result result) {
         if (!result.hasMatches()) {
-            log.info("No matches found for pattern: " + searchPattern);
+            log.info("No matches found");
             return;
         }
 
@@ -33,10 +33,6 @@ public class View {
         for (String module : sortedModules) {
             displayModule(module, pathsByModule.get(module));
         }
-    }
-
-    public void displayResult(Result result, String startClassName, String searchPattern) {
-        displayResult(result, searchPattern);
     }
 
     private void displayModule(String module, List<Result.TracePath> paths) {

@@ -1,24 +1,32 @@
 package com.example.product.application;
 
-import com.example.product.infra.Client;
+import com.example.product.infra.ProductRepository;
 
 public class ProductCommand {
-    private static final String BASE_URL = "https://api.example.com";
-    private static final String PRODUCT_PATH = "/api/products";
-    private Client client;
+    private ProductRepository productRepository;
 
     public void createProduct() {
-        // Create product using HTTP client
-        client.post(BASE_URL + PRODUCT_PATH, "product data");
+        // Create product via repository
+        productRepository.createProduct("product data");
     }
 
     public void updateProduct() {
-        // Update product via HTTP
-        client.post(BASE_URL + PRODUCT_PATH + "/update", "updated product");
+        // Update product via repository
+        productRepository.updateProduct("updated product");
     }
 
     public void deleteProduct() {
-        String endpoint = "/delete";
-        client.post(BASE_URL + PRODUCT_PATH + endpoint, "delete data");
+        // Delete product via repository
+        productRepository.deleteProduct();
+    }
+
+    public void getProduct() {
+        // Get product via repository
+        productRepository.getProduct("123");
+    }
+
+    public void listProducts() {
+        // List all products via repository
+        productRepository.listProducts();
     }
 }
