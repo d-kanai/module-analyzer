@@ -29,9 +29,101 @@ public class Tracer {
         Set<String> visited = new HashSet<>();
         List<String> currentChain = new ArrayList<>();
 
-        traceRecursive(startClassName, searchPattern, currentChain, visited, result);
+        traceRecursive(startClassName, searchPattern, currentChain, visited, result, "unknown");
 
         return result;
+    }
+
+    public Result traceDirectory(Path targetDir, String searchPattern) throws IOException {
+        // Build class file map first
+        buildClassFileMap();
+
+        Result result = new Result();
+
+        // Find all classes in target directory
+        List<String> targetClasses = findClassesInDirectory(targetDir);
+
+        // Trace each class independently
+        for (String className : targetClasses) {
+            Set<String> visited = new HashSet<>();
+            List<String> currentChain = new ArrayList<>();
+            traceRecursive(className, searchPattern, currentChain, visited, result, "unknown");
+        }
+
+        return result;
+    }
+
+    public Result traceModulesSubDir(Path root, String targetSubDir, String searchPattern) throws IOException {
+        // Build class file map first
+        buildClassFileMap();
+
+        Result result = new Result();
+
+        // Find all subdirectories matching targetSubDir in all modules
+        List<Path> targetDirs = findSubDirectories(root, targetSubDir);
+
+        // For each matching directory, find all classes and trace them
+        for (Path targetDir : targetDirs) {
+            // Extract module name from path (parent of targetSubDir)
+            String moduleName = extractModuleName(targetDir, root);
+
+            List<String> targetClasses = findClassesInDirectory(targetDir);
+
+            // Trace each class independently
+            for (String className : targetClasses) {
+                Set<String> visited = new HashSet<>();
+                List<String> currentChain = new ArrayList<>();
+                traceRecursive(className, searchPattern, currentChain, visited, result, moduleName);
+            }
+        }
+
+        return result;
+    }
+
+    private String extractModuleName(Path targetDir, Path root) {
+        // Get relative path from root
+        Path relativePath = root.relativize(targetDir);
+
+        // The first component is the module name
+        if (relativePath.getNameCount() > 0) {
+            return relativePath.getName(0).toString();
+        }
+
+        return "unknown";
+    }
+
+    private List<Path> findSubDirectories(Path root, String targetSubDir) throws IOException {
+        List<Path> matchingDirs = new ArrayList<>();
+
+        try (Stream<Path> paths = Files.walk(root, 3)) {
+            paths.filter(Files::isDirectory)
+                 .filter(path -> path.getFileName().toString().equals(targetSubDir))
+                 .forEach(matchingDirs::add);
+        }
+
+        return matchingDirs;
+    }
+
+    private List<String> findClassesInDirectory(Path targetDir) throws IOException {
+        List<String> classes = new ArrayList<>();
+
+        try (Stream<Path> paths = Files.walk(targetDir)) {
+            paths.filter(Files::isRegularFile)
+                 .filter(path -> path.toString().endsWith(".java"))
+                 .forEach(javaFile -> {
+                     try {
+                         String content = new String(Files.readAllBytes(javaFile));
+                         String fullClassName = extractFullClassName(javaFile, content);
+                         if (fullClassName != null) {
+                             classes.add(fullClassName);
+                         }
+                     } catch (IOException e) {
+                         log.warn("Failed to read file: " + javaFile);
+                     }
+                 });
+        }
+
+        return classes;
     }
 
     private void buildClassFileMap() throws IOException {
@@ -54,7 +146,7 @@ public class Tracer {
 
     private void traceRecursive(String className, String searchPattern,
                                 List<String> currentChain, Set<String> visited,
-                                Result result) throws IOException {
+                                Result result, String moduleName) throws IOException {
 
         if (visited.contains(className)) {
             return;
@@ -70,12 +162,14 @@ public class Tracer {
 
         String content = new String(Files.readAllBytes(classFile));
 
-        // Check if this class contains the search pattern (case-insensitive)
-        if (content.toLowerCase().contains(searchPattern.toLowerCase())) {
-            int lineNumber = findLineNumber(content, searchPattern);
+        // Find all occurrences of the search pattern in this class
+        List<Integer> matchingLines = findAllLineNumbers(content, searchPattern);
+        for (int lineNumber : matchingLines) {
             String lineContent = extractLine(content, lineNumber);
             String methodName = extractMethodNameAtLine(content, lineNumber);
-            result.addPath(new Result.TracePath(currentChain, className, lineNumber, lineContent, methodName));
+            String urlExpression = extractFirstArgument(lineContent, searchPattern);
+            String url = resolveUrlExpression(urlExpression, content);
+            result.addPath(new Result.TracePath(currentChain, className, lineNumber, lineContent, methodName, moduleName, url));
         }
 
         // Find all classes this class depends on
@@ -83,7 +177,7 @@ public class Tracer {
 
         for (String dependency : dependencies) {
             if (classFileMap.containsKey(dependency)) {
-                traceRecursive(dependency, searchPattern, currentChain, visited, result);
+                traceRecursive(dependency, searchPattern, currentChain, visited, result, moduleName);
             }
         }
 
@@ -154,6 +248,18 @@ public class Tracer {
         return null;
     }
 
+    private List<Integer> findAllLineNumbers(String content, String searchPattern) {
+        List<Integer> lineNumbers = new ArrayList<>();
+        String[] lines = content.split("\n");
+        String lowerPattern = searchPattern.toLowerCase();
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].toLowerCase().contains(lowerPattern)) {
+                lineNumbers.add(i + 1);
+            }
+        }
+        return lineNumbers;
+    }
+
     private int findLineNumber(String content, String searchPattern) {
         String[] lines = content.split("\n");
         String lowerPattern = searchPattern.toLowerCase();
@@ -211,5 +317,111 @@ public class Tracer {
         }
 
         return "unknown";
+    }
+
+    private String extractFirstArgument(String lineContent, String searchPattern) {
+        // Find the position of the search pattern (e.g., "client.post")
+        int patternIndex = lineContent.toLowerCase().indexOf(searchPattern.toLowerCase());
+        if (patternIndex == -1) {
+            return "";
+        }
+
+        // Find the opening parenthesis after the pattern
+        int openParenIndex = lineContent.indexOf('(', patternIndex);
+        if (openParenIndex == -1) {
+            return "";
+        }
+
+        // Extract the first argument (URL)
+        int startIndex = openParenIndex + 1;
+        String afterParen = lineContent.substring(startIndex).trim();
+
+        // Find the end of the first argument
+        int commaIndex = afterParen.indexOf(',');
+        int closeParenIndex = afterParen.indexOf(')');
+
+        int endIndex;
+        if (commaIndex != -1 && (closeParenIndex == -1 || commaIndex < closeParenIndex)) {
+            endIndex = commaIndex;
+        } else if (closeParenIndex != -1) {
+            endIndex = closeParenIndex;
+        } else {
+            return "";
+        }
+
+        String firstArg = afterParen.substring(0, endIndex).trim();
+        return firstArg;
+    }
+
+    private String resolveUrlExpression(String expression, String fileContent) {
+        expression = expression.trim();
+
+        // If it's a simple string literal, return it
+        Pattern literalPattern = Pattern.compile("^[\"']([^\"']*)[\"']$");
+        Matcher literalMatcher = literalPattern.matcher(expression);
+        if (literalMatcher.matches()) {
+            return literalMatcher.group(1);
+        }
+
+        // Handle concatenation (e.g., HOST + "/api/orders" + SUFFIX)
+        if (expression.contains("+")) {
+            StringBuilder result = new StringBuilder();
+            String[] parts = expression.split("\\+");
+
+            for (String part : parts) {
+                part = part.trim();
+
+                // Check if it's a string literal
+                Matcher partLiteralMatcher = literalPattern.matcher(part);
+                if (partLiteralMatcher.matches()) {
+                    result.append(partLiteralMatcher.group(1));
+                } else {
+                    // It's a variable or constant - try to resolve it
+                    String value = resolveVariable(part, fileContent);
+                    if (value != null) {
+                        result.append(value);
+                    } else {
+                        result.append("{").append(part).append("}");
+                    }
+                }
+            }
+
+            return result.toString();
+        }
+
+        // Single variable/constant
+        String value = resolveVariable(expression, fileContent);
+        if (value != null) {
+            return value;
+        }
+
+        return "{" + expression + "}";
+    }
+
+    private String resolveVariable(String varName, String fileContent) {
+        varName = varName.trim();
+
+        // Look for constant/field declarations
+        // Pattern: private/public static final String VARNAME = "value";
+        Pattern constantPattern = Pattern.compile(
+            "(?:private|public|protected)?\\s*(?:static)?\\s*(?:final)?\\s*String\\s+" +
+            Pattern.quote(varName) + "\\s*=\\s*[\"']([^\"']*)[\"']"
+        );
+        Matcher matcher = constantPattern.matcher(fileContent);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        // Look for simple variable assignments
+        // Pattern: String varName = "value";
+        Pattern varPattern = Pattern.compile(
+            "String\\s+" + Pattern.quote(varName) + "\\s*=\\s*[\"']([^\"']*)[\"']"
+        );
+        Matcher varMatcher = varPattern.matcher(fileContent);
+        if (varMatcher.find()) {
+            return varMatcher.group(1);
+        }
+
+        return null;
     }
 }

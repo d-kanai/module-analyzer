@@ -4,13 +4,22 @@ import java.util.*;
 
 public class Result {
     private final List<TracePath> paths;
+    private final Set<String> seenMatches;
 
     public Result() {
         this.paths = new ArrayList<>();
+        this.seenMatches = new HashSet<>();
     }
 
     public void addPath(TracePath path) {
-        paths.add(path);
+        // Create unique key: className.methodName
+        String key = path.getMatchedClass() + "." + path.getMethodName();
+
+        // Only add if not already seen
+        if (!seenMatches.contains(key)) {
+            seenMatches.add(key);
+            paths.add(path);
+        }
     }
 
     public List<TracePath> getPaths() {
@@ -27,13 +36,17 @@ public class Result {
         private final int lineNumber;
         private final String lineContent;
         private final String methodName;
+        private final String moduleName;
+        private final String url;
 
-        public TracePath(List<String> classChain, String matchedClass, int lineNumber, String lineContent, String methodName) {
+        public TracePath(List<String> classChain, String matchedClass, int lineNumber, String lineContent, String methodName, String moduleName, String url) {
             this.classChain = new ArrayList<>(classChain);
             this.matchedClass = matchedClass;
             this.lineNumber = lineNumber;
             this.lineContent = lineContent;
             this.methodName = methodName;
+            this.moduleName = moduleName;
+            this.url = url;
         }
 
         public List<String> getClassChain() {
@@ -54,6 +67,14 @@ public class Result {
 
         public String getMethodName() {
             return methodName;
+        }
+
+        public String getModuleName() {
+            return moduleName;
+        }
+
+        public String getUrl() {
+            return url;
         }
     }
 }

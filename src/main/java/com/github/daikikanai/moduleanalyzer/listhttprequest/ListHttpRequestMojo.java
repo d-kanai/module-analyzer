@@ -17,9 +17,6 @@ public class ListHttpRequestMojo extends AbstractMojo {
     @Parameter(property = "rootDir", required = true)
     private String rootDir;
 
-    @Parameter(property = "className", required = true)
-    private String className;
-
     @Parameter(property = "searchPattern", defaultValue = "client.post")
     private String searchPattern;
 
@@ -31,18 +28,19 @@ public class ListHttpRequestMojo extends AbstractMojo {
                 throw new MojoExecutionException("Root directory does not exist: " + rootDir);
             }
 
-            getLog().info("Tracing class: " + className);
+            getLog().info("Scanning modules in: " + rootDir);
+            getLog().info("Target subdirectory: application");
             getLog().info("Searching for pattern: " + searchPattern);
             getLog().info("");
 
             Tracer tracer = new Tracer(root, getLog());
-            Result result = tracer.trace(className, searchPattern);
+            Result result = tracer.traceModulesSubDir(root, "application", searchPattern);
 
             View view = new View(getLog());
-            view.displayResult(result, className, searchPattern);
+            view.displayResult(result, searchPattern);
 
         } catch (IOException e) {
-            throw new MojoExecutionException("Error tracing class", e);
+            throw new MojoExecutionException("Error tracing modules", e);
         }
     }
 }

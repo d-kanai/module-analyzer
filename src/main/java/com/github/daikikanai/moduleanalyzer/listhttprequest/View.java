@@ -2,7 +2,7 @@ package com.github.daikikanai.moduleanalyzer.listhttprequest;
 
 import org.apache.maven.plugin.logging.Log;
 
-import java.util.List;
+import java.util.*;
 
 public class View {
     private final Log log;
@@ -11,23 +11,53 @@ public class View {
         this.log = log;
     }
 
-    public void displayResult(Result result, String startClassName, String searchPattern) {
+    public void displayResult(Result result, String searchPattern) {
         if (!result.hasMatches()) {
             log.info("No matches found for pattern: " + searchPattern);
             return;
         }
 
-        log.info("");
+        // Group paths by module name
+        Map<String, List<Result.TracePath>> pathsByModule = new LinkedHashMap<>();
         for (Result.TracePath path : result.getPaths()) {
+            String moduleName = path.getModuleName();
+            pathsByModule.computeIfAbsent(moduleName, k -> new ArrayList<>()).add(path);
+        }
+
+        // Sort module names
+        List<String> sortedModules = new ArrayList<>(pathsByModule.keySet());
+        Collections.sort(sortedModules);
+
+        // Display each module
+        log.info("");
+        for (String module : sortedModules) {
+            displayModule(module, pathsByModule.get(module));
+        }
+    }
+
+    public void displayResult(Result result, String startClassName, String searchPattern) {
+        displayResult(result, searchPattern);
+    }
+
+    private void displayModule(String module, List<Result.TracePath> paths) {
+        log.info("[Module: " + module + "]");
+
+        for (Result.TracePath path : paths) {
             displayPath(path);
         }
+        log.info("");
     }
 
     private void displayPath(Result.TracePath path) {
         String className = path.getMatchedClass();
         String simpleClassName = className.substring(className.lastIndexOf('.') + 1);
         String methodName = path.getMethodName();
+        String url = path.getUrl();
 
-        log.info(simpleClassName + "." + methodName);
+        if (url != null && !url.isEmpty()) {
+            log.info("  - " + simpleClassName + "." + methodName + " -> " + url);
+        } else {
+            log.info("  - " + simpleClassName + "." + methodName);
+        }
     }
 }
