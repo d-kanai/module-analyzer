@@ -168,6 +168,8 @@ public class ModuleDataSource {
             files.filter(Files::isRegularFile)
                  .filter(path -> path.toString().endsWith(".java"))
                  .filter(path -> !path.toString().endsWith("Dto.java"))
+                 .filter(path -> !path.toString().endsWith("Input.java"))
+                 .filter(path -> !path.toString().endsWith("Output.java"))
                  .forEach(javaFile -> {
                      String className = extractClassName(exposePath, javaFile);
                      if (className != null) {
