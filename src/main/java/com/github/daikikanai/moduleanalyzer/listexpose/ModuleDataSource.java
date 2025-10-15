@@ -216,6 +216,17 @@ public class ModuleDataSource {
 
     private String extractModuleFromClassName(String className) {
         String[] parts = className.split("\\.");
+        // Find "expose" from the end and return the part before it
+        for (int i = parts.length - 1; i >= 1; i--) {
+            if (parts[i].equals("expose") || parts[i - 1].equals("expose")) {
+                // Return the part before "expose"
+                int exposeIndex = parts[i].equals("expose") ? i : i - 1;
+                if (exposeIndex > 0) {
+                    return parts[exposeIndex - 1];
+                }
+            }
+        }
+        // Fallback to old logic if "expose" not found
         if (parts.length >= 3) {
             return parts[2];
         }
