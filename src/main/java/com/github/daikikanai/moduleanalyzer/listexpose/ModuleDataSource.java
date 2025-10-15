@@ -167,6 +167,8 @@ public class ModuleDataSource {
         try (Stream<Path> files = Files.walk(exposePath)) {
             files.filter(Files::isRegularFile)
                  .filter(path -> path.toString().endsWith(".java"))
+                 .filter(path -> !path.toString().contains("/input/"))
+                 .filter(path -> !path.toString().contains("/output/"))
                  .filter(path -> !path.toString().endsWith("Dto.java"))
                  .filter(path -> !path.toString().endsWith("Input.java"))
                  .filter(path -> !path.toString().endsWith("Output.java"))
